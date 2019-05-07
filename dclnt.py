@@ -22,12 +22,14 @@ def is_verb(word):
 
 def get_all_filenames(path, limit=100):
     """creates a list of first 'limit' dir+name of *.py files in given path (incl. all subdirs)"""
-    filenames = []
+    filenames = set()
     for dirname, dirs, files in os.walk(path, topdown=True):
-        filenames += [os.path.join(dirname, file) for file in files if file.endswith('.py')]
-        if len(filenames) > limit:
-            filenames = filenames[:limit]
-            break
+        py_files_in_dir = [os.path.join(dirname, file) for file in files if file.endswith('.py')]
+        for file in py_files_in_dir:
+            filenames.add(file)
+            if len(filenames) > limit:
+                print('total {0} files'.format(len(filenames)))
+                return filenames
     print('total {0} files'.format(len(filenames)))
     return filenames
 
@@ -48,16 +50,16 @@ def get_trees(path, with_filenames=False, with_file_content=False):
     """creates and return list of Abstract Syntax Trees for every *.py file
     in given path (incl. subdirectories)"""
     filenames = get_all_filenames(path)
-    trees = []
+    trees = set()
     for filename in filenames:
         main_file_content, tree = get_tree_from_filename(filename)
         if with_filenames:
             if with_file_content:
-                trees.append((filename, main_file_content, tree))
+                trees.add(filename, main_file_content, tree)
             else:
-                trees.append((filename, tree))
+                trees.add((filename, tree))
         else:
-            trees.append(tree)
+            trees.add(tree)
     print('trees generated', len(trees))
     return trees
 
@@ -80,7 +82,7 @@ def get_verbs_from_function_name(function_name):
 def get_all_words_in_path(path):
     """returns all words of all used functions and assignments in *.py files
     contained in given path"""
-    trees = [t for t in get_trees(path) if t]
+    trees = {t for t in get_trees(path) if t}
     all_words = [f for f in flat([get_all_names(t) for t in trees])
                  if not (f.startswith('__') and f.endswith('__'))]
     for i in range(len(all_words)):
@@ -91,7 +93,7 @@ def get_all_words_in_path(path):
 def get_all_functions_names_in_path(path):
     """returns list of words contained in functions names from all *.py files
     in given path"""
-    trees = [t for t in get_trees(path) if t]
+    trees = {t for t in get_trees(path) if t}
     function_names = [f for f in flat([get_all_functions_names(t) for t in trees])
                       if not (f.startswith('__') and f.endswith('__'))]
     for i in range(len(function_names)):
