@@ -51,34 +51,36 @@ class Report:
         pass
 
 
-class RepositoryFactory(ABC):
-    """This is an Abstract factory to create instances of different classes depending on repo type"""
-    @abstractmethod
-    def create_repo(self, link):
-        pass
-
-
-class GithubRepositoryFactory(RepositoryFactory):
-    """this is class that creates an instance of GithubRepository class"""
-    def create_repo(self, link):
-        return GithubRepository(link)
-
-
 class GithubRepository:
     """this is class that provides for actions with Github repository"""
     def __init__(self, link):
         self.link = link
 
     def clone_repo(self):
-        path = input('Please enter path to directory you want to copy repository (folder must be empty) '
+        path_to_copy = input('Please enter path to directory you want to copy repository (folder must be empty) '
                      'or press "Enter" to copy into current directory: ')
 
-        if path == '':
+        if path_to_copy == '':
             folder = os.path.abspath('')
             repo_name = self.link.split('/')[-1]
-            path = os.path.join(folder, repo_name)
+            path_to_copy = os.path.join(folder, repo_name)
 
-        command = ["git", "clone", self.link, r'{0}'.format(path)]
+        count = 1
+        while True:
+            if os.path.isdir(path_to_copy):
+                dir_contents = [x for x in os.listdir(path_to_copy)]
+                if len(dir_contents) > 0:
+                    new_repo_name = repo_name + str(count)
+                    path_to_copy = os.path.join(folder, new_repo_name)
+                    print('unfortunatelly folder you want to copy repository is not empty, '
+                          'trying to copy to {0}'.format(path_to_copy))
+                    count += 1
+                else:
+                    break
+            else:
+                break
+
+        command = ["git", "clone", self.link, r'{0}'.format(path_to_copy)]
 
         try:
             subprocess.check_call(command)
@@ -86,15 +88,36 @@ class GithubRepository:
             print('Terminated. Error = ', err)
             return
 
-        print('GIT repository {0} was sucessfully cloned to {1}'.format(self.link, path))
-        return path
+        print('GIT repository {0} was sucessfully cloned to {1}'.format(self.link, path_to_copy))
+        return path_to_copy
 
 
-def get_repository_clone(factory, repo_link):
-    """this function creates an instance of the class depends on 'factory' argument and makes  its clone"""
-    repo = factory.create_repo(repo_link)
-    path_of_copy = repo.clone_repo()
-    return path_of_copy
+def get_repository_clone(repo_link):
+    """this function clones repository from given link if possible (if not
+     it uses default data) and returns list of pathes for futher ananysis"""
+    pathes = []
+    if repo_link is not None and 'github' in repo_link:
+        pathes += [GithubRepository(repo_link).clone_repo()]
+    else:
+        if repo_link is None:
+            print('Program will continue running with default data')
+        else:
+            print('Unfortunatelly it is impossible to clone repository from {0}. Program will continue running with'
+                  'default data'.format(repo_link))
+
+        projects = [
+            'django',
+            'flask',
+            'pyramid',
+            'reddit',
+            'requests',
+            'sqlalchemy',
+        ]
+        for project in projects:
+            path = os.path.join('.', project)
+            pathes.append(path)
+
+    return pathes
 
 
 class FileList:
@@ -195,11 +218,11 @@ class Statistics(MixinFlat):
 
     def verb_frequency(self, top_size=10):
         verbs = [word for word in self.data if Word(word).word_type == 'verb']
-        return collections.Counter(verbs).most_common(top_size)
+        return Report(collections.Counter(verbs).most_common(top_size))
 
     def noun_frequency(self, top_size=10):
         nouns = [word for word in self.data if Word(word).word_type == 'noun']
-        return collections.Counter(nouns).most_common(top_size)
+        return Report(collections.Counter(nouns).most_common(top_size))
 
     def another_stat(self):
         pass
@@ -238,7 +261,7 @@ def get_args_from_command_line():
     return arguments
 
 
-def get_data_for_analysis_py(pathes, args):
+def get_data_for_analysis_py(pathes, analysys_range):
     """this function returns instance of class Statistics for further analysis"""
     py_filelnames = set()
     for obj in [FileList(path) for path in pathes]:
@@ -246,9 +269,9 @@ def get_data_for_analysis_py(pathes, args):
 
     py_files = [PyCodeParsed(filename) for filename in py_filelnames]
 
-    if args.range == 'func':
+    if analysys_range == 'func':
         names = [obj.get_all_functions_names() for obj in py_files]
-    elif args.range == 'var':
+    elif analysys_range == 'var':
         names = [obj.get_all_names() for obj in py_files]
 
     return Statistics(names)
@@ -257,30 +280,9 @@ def get_data_for_analysis_py(pathes, args):
 def main():
     args = get_args_from_command_line()
     pathes = []
-    if args.repo is not None and 'github' in args.repo:
-        factory = GithubRepositoryFactory()
-        pathes += get_repository_clone(factory, args.repo)
+    pathes += get_repository_clone(args.repo)
 
-    else:
-        if args.repo is None:
-            print('Program will continue running with default data')
-        else:
-            print('Unfortunatelly it is impossible to clone repository from {0}. Program will continue running with'
-                  'default data'.format(args.repo))
-
-        projects = [
-            'django',
-            'flask',
-            'pyramid',
-            'reddit',
-            'requests',
-            'sqlalchemy',
-        ]
-        for project in projects:
-            path = os.path.join('.', project)
-            pathes.append(path)
-
-    data = get_data_for_analysis_py(pathes, args)
+    data = get_data_for_analysis_py(pathes, args.range)
 
     if args.statistics == 'verb':
         result = data.verb_frequency()
